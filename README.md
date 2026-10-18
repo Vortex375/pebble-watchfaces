@@ -7,9 +7,9 @@ heart rate.
 
 | Default | Digital time in the centre |
 | :---: | :---: |
-| ![Default settings](screenshots/default.png) | ![Digital time in the centre](screenshots/centre.png) |
+| ![Default settings](screenshots/2x/emery_default.png) | ![Digital time in the centre](screenshots/2x/emery_centre.png) |
 | **Digital time hidden** | **Night time: the moon replaces the sun** |
-| ![Digital time hidden](screenshots/hidden.png) | ![Midnight with the moon](screenshots/night.png) |
+| ![Digital time hidden](screenshots/2x/emery_hidden.png) | ![Midnight with the moon](screenshots/2x/emery_night.png) |
 
 ## How to read it
 
