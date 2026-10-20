@@ -46,7 +46,7 @@
 #define C_GRAY   GColorLightGray
 #define C_RED    GColorRed
 #define C_WOOD   GColorWindsorTan     // hub + sun/moon disc
-#define C_MOON   GColorJaegerGreen
+#define C_MOON   GColorCadetBlue
 #define C_WHITE  GColorWhite
 
 // ---------------------------------------------------------------------------
@@ -459,20 +459,25 @@ static void draw_label(GContext *ctx, const char *text, GPoint c) {
                      GTextAlignmentCenter, NULL);
 }
 
+// Crescent moon traced from the night-time clock: runs from a tip near 12
+// o'clock down the left and along the bottom to a tip near 3 o'clock, with a
+// cloud-shaped wooden inner edge. Local (t, r) frame, quarter pixels, on the
+// 22 px disc.
+static const int16_t s_crescent[29][2] = {
+  { -2, 63 }, { -25, 58 }, { -46, 46 }, { -63, 27 }, { -70, 2 }, { -68, -21 },
+  { -59, -42 }, { -42, -59 }, { -21, -70 }, { 2, -74 }, { 25, -70 }, { 46, -59 },
+  { 59, -44 }, { 66, -25 }, { 68, -6 }, { 66, 6 },                    // outer edge
+  { 59, -8 }, { 47, -17 }, { 36, -27 }, { 21, -32 }, { 8, -29 }, { 0, -21 },
+  { -1, -12 }, { -3, -2 }, { -19, 0 }, { -27, 9 }, { -29, 23 }, { -25, 38 },
+  { -15, 52 }                                                          // inner edge
+};
+
 static void draw_moon_disc(GContext *ctx, GPoint c, int rot) {
   fill_circle(ctx, c, 22, C_WOOD);
   stroke_circle(ctx, c, 22, C_LINE, 1);
-  // Green crescent: green disc with a wooden bite towards the upper left
-  fill_circle(ctx, c, 17, C_MOON);
-  stroke_circle(ctx, c, 17, C_LINE, 1);
-  GPoint bite = local_pt(c, rot, -16, 20);
-  fill_circle(ctx, bite, 13, C_WOOD);
-  stroke_circle(ctx, bite, 13, C_LINE, 1);
-  // Repaint the disc edge the bite overlapped, then the crater
-  stroke_circle(ctx, c, 22, C_LINE, 1);
-  GPoint crater = local_pt(c, rot, 32, -24);
-  fill_circle(ctx, crater, 3, C_WOOD);
-  stroke_circle(ctx, crater, 3, C_LINE, 1);
+  local_poly(ctx, c, rot, s_crescent, 29, C_MOON, 1);
+  // Small wooden hole in the lower left of the crescent
+  local_oval(ctx, c, rot, -32, -32, 13, 11, C_WOOD, 1);
 }
 
 static void draw_face(GContext *ctx) {
