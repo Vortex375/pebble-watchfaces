@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orbit Sky Palettes</title>
+<style>
+  :root { --bg: #f4f3ef; --fg: #1d1d1b; --muted: #77746c; --card: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --fg: #ecebe6; --muted: #9a978e; --card: #1f1f1d; }
+  }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-bottom: 24px; }
+  .controls input[type=range] { width: 260px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 24px; }
+  figure { margin: 0; background: var(--card); padding: 14px; border-radius: 14px; width: 330px;
+           max-width: 100%; box-sizing: border-box; }
+  canvas { width: 100%; aspect-ratio: 200 / 228; display: block; border-radius: 10px; }
+  figcaption b { display: block; margin-top: 10px; font-size: 15px; }
+  figcaption span { color: var(--muted); }
+  .sw { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .sw i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px;
+          margin-right: 3px; border: 1px solid #8884; }
+</style>
+</head>
+<body>
+<h1>Orbit — sky palette variations</h1>
+<p class="lead">Only the hour ring colours change. Sunrise 07:58, sunset 18:12; each twilight band covers
+30 min either side. Clockwise from the top is the past, counter-clockwise the future. Set the time to
+around 07:00 or 19:00 to see dawn or dusk next to the readout.</p>
+
+<div class="controls">
+  <label>Time <input id="t" type="range" min="0" max="1439" step="1"> <output id="tout"></output></label>
+  <label><input id="live" type="checkbox"> live</label>
+  <label><input id="play" type="checkbox"> fast-forward</label>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const W = 200, H = 228, CX = 100, CY = 114;
+const SUNRISE = 7 * 60 + 58, SUNSET = 18 * 60 + 12, TWILIGHT = 30;
+
+// Pebble 64-colour names used below
+const C = {
+  OxfordBlue: '#000055', DukeBlue: '#0000AA', Indigo: '#5500AA', ImperialPurple: '#550055',
+  ElectricUltramarine: '#5500FF', VividViolet: '#AA00FF', LavenderIndigo: '#AA55FF', Purpureus: '#AA55AA',
+  Liberty: '#5555AA', VeryLightBlue: '#5555FF', BabyBlueEyes: '#AAAAFF', CobaltBlue: '#0055AA',
+  PictonBlue: '#55AAFF', Celeste: '#AAFFFF', Black: '#000000', DarkGray: '#555555',
+  Yellow: '#FFFF00', Icterine: '#FFFF55', PastelYellow: '#FFFFAA', ChromeYellow: '#FFAA00',
+  Rajah: '#FFAA55', Orange: '#FF5500', SunsetOrange: '#FF5555', Red: '#FF0000', Folly: '#FF0055',
+  Melon: '#FFAAAA', WindsorTan: '#AA5500', DarkCandyAppleRed: '#AA0000',
+};
+
+// dawn / dusk are [before, after] the sun event, so a palette can blend in two steps
+const PALETTES = [
+  { name: 'Current', note: 'For comparison: day and night are both cool blues.',
+    day: 'PictonBlue', night: 'Indigo', dawn: ['SunsetOrange', 'SunsetOrange'], dusk: ['SunsetOrange', 'SunsetOrange'] },
+  { name: 'Gold day', note: 'Warm amber day against a deep blue night. Violet dawn, orange dusk.',
+    day: 'ChromeYellow', night: 'DukeBlue', dawn: ['LavenderIndigo', 'LavenderIndigo'], dusk: ['Orange', 'Orange'] },
+  { name: 'Sunlight', note: 'Bright yellow day, indigo night. Blue-violet dawn, red dusk.',
+    day: 'Icterine', night: 'Indigo', dawn: ['VeryLightBlue', 'VeryLightBlue'], dusk: ['Red', 'Red'] },
+  { name: 'Pastel', note: 'Soft cream day, muted slate night. Periwinkle dawn, apricot dusk.',
+    day: 'PastelYellow', night: 'Liberty', dawn: ['BabyBlueEyes', 'BabyBlueEyes'], dusk: ['Rajah', 'Rajah'] },
+  { name: 'Ink night', note: 'Night is almost the background, so only the day really stands out.',
+    day: 'Rajah', night: 'Black', dawn: ['VividViolet', 'VividViolet'], dusk: ['Folly', 'Folly'] },
+  { name: 'Two-step', note: 'Twilight in two shades: night → violet → lavender → day, day → orange → red → night.',
+    day: 'ChromeYellow', night: 'DukeBlue', dawn: ['VividViolet', 'LavenderIndigo'], dusk: ['Orange', 'Red'] },
+];
+
+const rad = d => (d - 90) * Math.PI / 180;
+const pt = (r, d) => [CX + r * Math.cos(rad(d)), CY + r * Math.sin(rad(d))];
+function dot(c, d, r, size, col) {
+  const [x, y] = pt(r, d); c.fillStyle = col; c.beginPath(); c.arc(x, y, size, 0, 2 * Math.PI); c.fill();
+}
+function band(c, rOut, rIn, d0, d1, col) {
+  c.fillStyle = col; c.beginPath();
+  c.arc(CX, CY, rOut, rad(d0), rad(d1)); c.arc(CX, CY, rIn, rad(d1), rad(d0), true); c.fill();
+}
+function text(c, s, x, y, size, col, weight = 700, align = 'center') {
+  c.fillStyle = col; c.font = `${weight} ${size}px system-ui, sans-serif`;
+  c.textAlign = align; c.textBaseline = 'middle'; c.fillText(s, x, y);
+}
+const pad = n => String(n).padStart(2, '0');
+
+function skyColor(p, min) {
+  min = ((min % 1440) + 1440) % 1440;
+  for (const [ev, key] of [[SUNRISE, 'dawn'], [SUNSET, 'dusk']]) {
+    if (Math.abs(min - ev) < TWILIGHT) return C[p[key][min < ev ? 0 : 1]];
+  }
+  return C[min >= SUNRISE && min < SUNSET ? p.day : p.night];
+}
+
+function draw(c, p, now) {
+  const m = now % 60, h = Math.floor(now / 60);
+  c.fillStyle = C.OxfordBlue; c.fillRect(0, 0, W, H);
+  for (let k = 0; k < 60; k++) {
+    const d = (m - k) * 6;
+    if (k === 0) { const [x, y] = pt(90, d); c.strokeStyle = C.Yellow; c.lineWidth = 2;
+                   c.beginPath(); c.arc(x, y, 4, 0, 2 * Math.PI); c.stroke(); }
+    else if (k % 15 === 0) dot(c, d, 90, 3, '#FFFFFF');
+    else if (k % 5 === 0) dot(c, d, 90, 2, C.Celeste);
+    else dot(c, d, 90, 1, C.Liberty);
+  }
+  // Hour band in 1° steps: angle a clockwise from the top is now - 4a minutes
+  for (let a = 0; a < 360; a++) band(c, 76, 66, a - 0.6, a + 0.6, skyColor(p, now - a * 4));
+  for (let k = 0; k < 24; k++) {
+    const d = (now - k * 60) / 4;
+    if (k === 0) { dot(c, d, 71, 6, C.OxfordBlue); dot(c, d, 71, 4, C.Yellow); }
+    else dot(c, d, 71, 1.5, C.OxfordBlue);
+  }
+  c.fillStyle = C.OxfordBlue; c.strokeStyle = C.Celeste; c.lineWidth = 1.5;
+  c.beginPath(); c.roundRect(86, 12, 28, 44, 9); c.fill(); c.stroke();
+  text(c, pad(m), 100, 24, 16, '#FFFFFF');
+  text(c, pad(h), 100, 43, 16, C.Yellow);
+  c.lineCap = 'round'; c.lineWidth = 3;
+  c.strokeStyle = C.CobaltBlue; c.beginPath(); c.arc(CX, CY + 6, 28, 0, 2 * Math.PI); c.stroke();
+  c.strokeStyle = '#55FFFF'; c.beginPath(); c.arc(CX, CY + 6, 28, rad(0), rad(245)); c.stroke();
+  text(c, '6812', 100, 116, 15, '#FFFFFF');
+  text(c, 'steps', 100, 132, 10, C.Celeste, 500);
+  text(c, 'FRI 23', 6, 10, 13, C.Celeste, 600, 'left');
+  text(c, '10°', 194, 10, 13, C.Celeste, 600, 'right');
+  text(c, '♥ 72', 6, 218, 13, C.Celeste, 600, 'left');
+  text(c, '100%', 194, 218, 13, C.Celeste, 600, 'right');
+}
+
+const swatch = (label, name) => `<span><i style="background:${C[name]}"></i>${label} ${name}</span>`;
+const grid = document.getElementById('grid');
+const canvases = PALETTES.map(p => {
+  const fig = document.createElement('figure');
+  const cv = document.createElement('canvas');
+  const dpr = 4;
+  cv.width = W * dpr; cv.height = H * dpr; cv.getContext('2d').scale(dpr, dpr);
+  fig.append(cv);
+  const dawn = p.dawn[0] === p.dawn[1] ? swatch('dawn', p.dawn[0]) : swatch('dawn', p.dawn[0]) + swatch('→', p.dawn[1]);
+  const dusk = p.dusk[0] === p.dusk[1] ? swatch('dusk', p.dusk[0]) : swatch('dusk', p.dusk[0]) + swatch('→', p.dusk[1]);
+  fig.insertAdjacentHTML('beforeend', `<figcaption><b>${p.name}</b><span>${p.note}</span>
+    <div class="sw">${swatch('day', p.day)}${swatch('night', p.night)}${dawn}${dusk}</div></figcaption>`);
+  grid.append(fig);
+  return cv;
+});
+
+const $ = id => document.getElementById(id);
+function render() {
+  const now = +$('t').value;
+  $('tout').textContent = pad(Math.floor(now / 60)) + ':' + pad(now % 60);
+  PALETTES.forEach((p, i) => draw(canvases[i].getContext('2d'), p, now));
+}
+const nowMinutes = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+$('t').value = 19 * 60;  // dusk just behind, dawn ahead: both twilights visible
+$('t').addEventListener('input', () => { $('live').checked = false; render(); });
+setInterval(() => {
+  if ($('play').checked) { $('live').checked = false; $('t').value = (+$('t').value + 1) % 1440; render(); }
+  else if ($('live').checked && +$('t').value !== nowMinutes()) { $('t').value = nowMinutes(); render(); }
+}, 80);
+render();
+</script>
+</body>
+</html>
