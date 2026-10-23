@@ -24,6 +24,9 @@
 #define R_HOUR_OUT 78   // hour band
 #define R_HOUR_IN  62
 #define R_HOUR     70   // hour dots, middle of the band
+#define R_HTICK    59   // outer end of the static hour tick marks
+#define HTICK_LEN  4
+#define HTICK_LEN_QUARTER 7
 #define R_PROGRESS 29   // steps / battery progress ring in the centre
 #define STEP_GOAL  10000
 #define TWILIGHT   30   // minutes either side of sunrise / sunset
@@ -51,6 +54,8 @@ typedef struct {
   bool digital_12h;
   uint8_t center;
   uint8_t corner[4];
+  bool minute_ticks;  // appended later: older saved settings keep the defaults
+  bool hour_ticks;
 } Settings;
 
 static Settings s_settings = {
@@ -58,6 +63,8 @@ static Settings s_settings = {
   .digital_12h = false,
   .center = ITEM_STEPS,
   .corner = { ITEM_DATE, ITEM_WEATHER, ITEM_HEART, ITEM_BATTERY },
+  .minute_ticks = true,
+  .hour_ticks = true,
 };
 
 // ---------------------------------------------------------------------------
@@ -136,6 +143,18 @@ static GRect square_around(GPoint c, int r) {
   return GRect(c.x - r, c.y - r, 2 * r + 1, 2 * r + 1);
 }
 
+// Ring sector of the given thickness inside radius r, from angle start to
+// end (start may be negative, down to minus a full turn); wraps past 12 o'clock
+static void fill_sector(GContext *ctx, int r, int thickness, int32_t start, int32_t end) {
+  if (start < 0) { start += TRIG_MAX_ANGLE; end += TRIG_MAX_ANGLE; }
+  GRect rect = square_around(s_center, r);
+  graphics_fill_radial(ctx, rect, GOvalScaleModeFitCircle, thickness, start,
+                       end < TRIG_MAX_ANGLE ? end : TRIG_MAX_ANGLE);
+  if (end > TRIG_MAX_ANGLE) {
+    graphics_fill_radial(ctx, rect, GOvalScaleModeFitCircle, thickness, 0, end - TRIG_MAX_ANGLE);
+  }
+}
+
 static void draw_text(GContext *ctx, const char *text, const char *font, GRect box,
                       GTextAlignment align, GColor color) {
   graphics_context_set_text_color(ctx, color);
@@ -176,6 +195,22 @@ static void draw_ticks(GContext *ctx) {
   }
 }
 
+// Static tick marks inside the hour ring, one per hour position (24 or 12).
+// Each is a thin annular sector about 2 px wide, so its edges run exactly
+// towards the centre without any rounding tilt. The quarter positions (12, 3,
+// 6 and 9 o'clock) are longer, about 4 px wide and white like the 15-minute
+// dots.
+static void draw_hour_ticks(GContext *ctx) {
+  int hours = ring_span() / 60;
+  for (int i = 0; i < hours; i++) {
+    int32_t a = TRIG_MAX_ANGLE * i / hours;
+    bool quarter = i % (hours / 4) == 0;
+    int32_t half = quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(1);
+    graphics_context_set_fill_color(ctx, quarter ? GColorWhite : C_TICK);
+    fill_sector(ctx, R_HTICK, quarter ? HTICK_LEN_QUARTER : HTICK_LEN, a - half, a + half);
+  }
+}
+
 static void draw_minute_ring(GContext *ctx) {
   int m = s_now % 60;
   for (int k = 0; k < 60; k++) {
@@ -202,21 +237,14 @@ static void draw_minute_ring(GContext *ctx) {
 // matters for the 12-hour ring.
 static void hour_arc(GContext *ctx, int t0, int t1, GColor color) {
   int span = ring_span(), half = span / 2;
-  GRect r = square_around(s_center, R_HOUR_OUT);
   graphics_context_set_fill_color(ctx, color);
   for (int shift = -24 * 60; shift <= 24 * 60; shift += 24 * 60) {
     int a = t0 + shift - s_now, b = t1 + shift - s_now;  // relative to now
     if (a < -half) a = -half;
     if (b > half) b = half;
     if (a >= b) continue;
-    int32_t start = -b * TRIG_MAX_ANGLE / span, end = -a * TRIG_MAX_ANGLE / span;
-    if (start < 0) { start += TRIG_MAX_ANGLE; end += TRIG_MAX_ANGLE; }
-    graphics_fill_radial(ctx, r, GOvalScaleModeFitCircle, R_HOUR_OUT - R_HOUR_IN, start,
-                         end < TRIG_MAX_ANGLE ? end : TRIG_MAX_ANGLE);
-    if (end > TRIG_MAX_ANGLE) {
-      graphics_fill_radial(ctx, r, GOvalScaleModeFitCircle, R_HOUR_OUT - R_HOUR_IN, 0,
-                           end - TRIG_MAX_ANGLE);
-    }
+    fill_sector(ctx, R_HOUR_OUT, R_HOUR_OUT - R_HOUR_IN, -b * TRIG_MAX_ANGLE / span,
+                -a * TRIG_MAX_ANGLE / span);
   }
 }
 
@@ -412,9 +440,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, C_BG);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_antialiased(ctx, true);
-  draw_ticks(ctx);
+  if (s_settings.minute_ticks) draw_ticks(ctx);
   draw_minute_ring(ctx);
   draw_hour_ring(ctx);
+  if (s_settings.hour_ticks) draw_hour_ticks(ctx);
   draw_readout(ctx);
   draw_center(ctx);
   draw_corner(ctx, s_settings.corner[CORNER_TL], bounds, false, false);
@@ -558,6 +587,14 @@ static bool read_settings(DictionaryIterator *iter) {
   Tuple *t;
   if ((t = dict_find(iter, MESSAGE_KEY_Ring12h))) {
     s_settings.ring_12h = tuple_int(t) != 0;
+    changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_MinuteTicks))) {
+    s_settings.minute_ticks = tuple_int(t) != 0;
+    changed = true;
+  }
+  if ((t = dict_find(iter, MESSAGE_KEY_HourTicks))) {
+    s_settings.hour_ticks = tuple_int(t) != 0;
     changed = true;
   }
   if ((t = dict_find(iter, MESSAGE_KEY_Digital12h))) {

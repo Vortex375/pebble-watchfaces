@@ -30,6 +30,16 @@ module.exports = [
   {
     type: 'section',
     items: [
+      { type: 'heading', defaultValue: 'Tick marks' },
+      { type: 'toggle', messageKey: 'MinuteTicks', label: 'Minute tick marks', defaultValue: true,
+        description: 'Outside the minute ring, every 5 minutes.' },
+      { type: 'toggle', messageKey: 'HourTicks', label: 'Hour tick marks', defaultValue: true,
+        description: 'Inside the hour ring.' }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
       { type: 'heading', defaultValue: 'Metrics' },
       metric('Center', 'Centre', '3'),
       metric('CornerTL', 'Top left', '2'),

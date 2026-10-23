@@ -131,7 +131,9 @@
       "CornerTL",
       "CornerTR",
       "CornerBL",
-      "CornerBR"
+      "CornerBR",
+      "MinuteTicks",
+      "HourTicks"
     ]
   },
   "license": "MIT"
