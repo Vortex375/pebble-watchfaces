@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two-Ring Mockups</title>
+<style>
+  :root { --bg: #f4f3ef; --fg: #1d1d1b; --muted: #77746c; --card: #fff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141413; --fg: #ecebe6; --muted: #9a978e; --card: #1f1f1d; }
+  }
+  body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center;
+              margin-bottom: 24px; }
+  .controls input[type=range] { width: 260px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 24px; }
+  figure { margin: 0; background: var(--card); padding: 14px; border-radius: 14px; width: 400px;
+           max-width: 100%; box-sizing: border-box; }
+  canvas { width: 100%; max-width: 400px; aspect-ratio: 200 / 228; display: block;
+           border-radius: 10px; }
+  figcaption b { display: block; margin-top: 10px; font-size: 15px; }
+  figcaption span { color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>Two-ring watch face — design mockups</h1>
+<p class="lead">Emery (200×228), Pebble 64-colour palette only. Both rings turn clockwise: the mark at the
+top is the current minute / hour, and the 0-minute / anchor-hour mark works like a classic hand.
+Sunrise 07:58, sunset 18:12 for the day/night colouring.</p>
+
+<div class="controls">
+  <label>Time <input id="t" type="range" min="0" max="1439" step="1"> <output id="tout"></output></label>
+  <label><input id="live" type="checkbox" checked> live</label>
+  <label><input id="play" type="checkbox"> fast-forward</label>
+  <label><input id="h24" type="checkbox" checked> 24-hour hour ring</label>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const W = 200, H = 228, CX = 100, CY = 114;
+const SUNRISE = 7 * 60 + 58, SUNSET = 18 * 60 + 12, TWILIGHT = 30;
+
+// Degrees clockwise from 12 o'clock -> canvas point / radians.
+const rad = d => (d - 90) * Math.PI / 180;
+const pt = (r, d) => [CX + r * Math.cos(rad(d)), CY + r * Math.sin(rad(d))];
+
+function line(c, d, r1, r2, w, col) {
+  const [x1, y1] = pt(r1, d), [x2, y2] = pt(r2, d);
+  c.strokeStyle = col; c.lineWidth = w; c.lineCap = 'butt';
+  c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+}
+function dot(c, d, r, size, col) {
+  const [x, y] = pt(r, d);
+  c.fillStyle = col; c.beginPath(); c.arc(x, y, size, 0, 2 * Math.PI); c.fill();
+}
+function ring(c, d, r, size, w, col) {
+  const [x, y] = pt(r, d);
+  c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.arc(x, y, size, 0, 2 * Math.PI); c.stroke();
+}
+// Triangle pointing towards the centre, tip at rTip, base at rBase, half-width in degrees.
+function wedge(c, d, rBase, rTip, half, col) {
+  const a = pt(rBase, d - half), b = pt(rBase, d + half), t = pt(rTip, d);
+  c.fillStyle = col; c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.lineTo(...t); c.fill();
+}
+function band(c, rOut, rIn, d0, d1, col) {
+  c.fillStyle = col; c.beginPath();
+  c.arc(CX, CY, rOut, rad(d0), rad(d1)); c.arc(CX, CY, rIn, rad(d1), rad(d0), true); c.fill();
+}
+function rrect(c, x, y, w, h, r) {
+  c.beginPath(); c.roundRect(x, y, w, h, r);
+}
+function text(c, s, x, y, size, col, weight = 700, align = 'center', font = 'system-ui, sans-serif') {
+  c.fillStyle = col; c.font = `${weight} ${size}px ${font}`;
+  c.textAlign = align; c.textBaseline = 'middle'; c.fillText(s, x, y);
+}
+
+function phase(min) {
+  min = ((min % 1440) + 1440) % 1440;
+  if (Math.abs(min - SUNRISE) < TWILIGHT || Math.abs(min - SUNSET) < TWILIGHT) return 'twilight';
+  return min >= SUNRISE && min < SUNSET ? 'day' : 'night';
+}
+
+// Hour ring background split into day / twilight / night arcs. Clockwise from the top is the past,
+// counter-clockwise the future. A 12-hour ring shows now ±6 h, a 24-hour ring the whole day.
+function dayNightBand(c, s, rOut, rIn, cols) {
+  const per = s.n / 360;  // hours per degree
+  let start = -180, cur = null;
+  for (let a = -180; a <= 180; a++) {
+    const p = a < 180 ? phase(s.now - a * per * 60) : null;
+    if (p !== cur) {
+      if (cur && cols[cur]) band(c, rOut, rIn, start, a, cols[cur]);
+      start = a; cur = p;
+    }
+  }
+}
+
+// Iterate the ticks: k is the minute / hour number, d its current angle.
+function minuteTicks(s, f) { for (let k = 0; k < 60; k++) f(k, (s.m - k) * 6); }
+function hourTicks(s, f) {
+  const step = 360 / s.n;
+  for (let k = 0; k < s.n; k++) f(k, (s.hf - k) * step);
+}
+
+const pad = n => String(n).padStart(2, '0');
+
+const DESIGNS = [
+  {
+    name: 'Monolith',
+    note: 'Black, white, one orange accent. Hour ring is a thin segmented band; the time readout is a plain slot.',
+    draw(c, s) {
+      c.fillStyle = '#000000'; c.fillRect(0, 0, W, H);
+      minuteTicks(s, (k, d) => {
+        if (k === 0) wedge(c, d, 97, 82, 3.2, '#FF5500');
+        else if (k % 15 === 0) line(c, d, 97, 84, 3, '#FFFFFF');
+        else if (k % 5 === 0) line(c, d, 97, 88, 2, '#FFFFFF');
+        else line(c, d, 97, 93, 1, '#AAAAAA');
+      });
+      dayNightBand(c, s, 74, 67, { day: '#FFAA00', twilight: '#FF5500', night: '#0000AA' });
+      hourTicks(s, (k, d) => {
+        line(c, d, 75, 66, 2, '#000000');
+        if (k === 0) wedge(c, d, 64, 56, 6, '#FF5500');
+      });
+      c.fillStyle = '#000000'; c.fillRect(85, 14, 30, 50);
+      c.strokeStyle = '#FFFFFF'; c.lineWidth = 1; c.strokeRect(85.5, 14.5, 29, 49);
+      text(c, pad(s.m), 100, 27, 18, '#FFFFFF');
+      text(c, pad(s.hDisp), 100, 51, 18, '#FF5500');
+      text(c, s.dateShort, 100, 114, 14, '#AAAAAA', 600);
+      text(c, '8 412', 6, 10, 14, '#AAAAAA', 600, 'left');
+      text(c, '11°', 194, 10, 14, '#AAAAAA', 600, 'right');
+      text(c, '72 ♥', 6, 218, 14, '#AAAAAA', 600, 'left');
+      text(c, '80%', 194, 218, 14, '#AAAAAA', 600, 'right');
+    },
+  },
+  {
+    name: 'Railway',
+    note: 'White dial, black ticks, signal-red markers. Solid hour band in warm day / cool night colours.',
+    draw(c, s) {
+      c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, W, H);
+      minuteTicks(s, (k, d) => {
+        if (k === 0) line(c, d, 98, 78, 4, '#FF0000');
+        else if (k % 15 === 0) line(c, d, 98, 80, 4, '#000000');
+        else if (k % 5 === 0) line(c, d, 98, 84, 3, '#000000');
+        else line(c, d, 98, 91, 1.5, '#000000');
+      });
+      dayNightBand(c, s, 75, 60, { day: '#FFFF55', twilight: '#FFAA55', night: '#5555AA' });
+      hourTicks(s, (k, d) => {
+        if (k === 0) line(c, d, 76, 59, 4, '#FF0000');
+        else line(c, d, 75, 60, 1.5, '#FFFFFF');
+      });
+      c.fillStyle = '#000000'; c.fillRect(84, 12, 32, 52);
+      text(c, pad(s.m), 100, 26, 19, '#FFFFFF');
+      c.fillStyle = '#FF0000'; c.fillRect(84, 38, 32, 1);
+      text(c, pad(s.hDisp), 100, 51, 19, '#FFFFFF');
+      text(c, '11°', 100, 108, 28, '#000000', 700);
+      text(c, 'PARTLY CLOUDY', 100, 130, 10, '#555555', 600);
+      text(c, s.dayName, 6, 10, 15, '#000000', 700, 'left');
+      text(c, s.dayNum, 194, 10, 15, '#FF0000', 700, 'right');
+      text(c, '8 412', 6, 218, 14, '#555555', 600, 'left');
+      text(c, '72 bpm', 194, 218, 14, '#555555', 600, 'right');
+    },
+  },
+  {
+    name: 'Orbit',
+    note: 'Night-sky blue with dot ticks. The hour ring is a sky: blue by day, indigo by night, coral at dusk and dawn.',
+    draw(c, s) {
+      c.fillStyle = '#000055'; c.fillRect(0, 0, W, H);
+      minuteTicks(s, (k, d) => {
+        if (k === 0) ring(c, d, 90, 4, 2, '#FFFF00');
+        else if (k % 15 === 0) dot(c, d, 90, 3, '#FFFFFF');
+        else if (k % 5 === 0) dot(c, d, 90, 2, '#AAFFFF');
+        else dot(c, d, 90, 1, '#5555AA');
+      });
+      dayNightBand(c, s, 76, 66, { day: '#55AAFF', twilight: '#FF5555', night: '#5500AA' });
+      hourTicks(s, (k, d) => {
+        if (k === 0) { dot(c, d, 71, 6, '#000055'); dot(c, d, 71, 4, '#FFFF00'); }
+        else dot(c, d, 71, 1.5, '#000055');
+      });
+      c.fillStyle = '#000055'; c.strokeStyle = '#AAFFFF'; c.lineWidth = 1.5;
+      rrect(c, 86, 12, 28, 44, 9); c.fill(); c.stroke();
+      text(c, pad(s.m), 100, 24, 16, '#FFFFFF');
+      text(c, pad(s.hDisp), 100, 43, 16, '#FFFF00');
+      // Steps progress
+      const p = 0.68;
+      c.lineCap = 'round';
+      c.strokeStyle = '#0055AA'; c.lineWidth = 3;
+      c.beginPath(); c.arc(CX, CY + 6, 28, rad(0), rad(360)); c.stroke();
+      c.strokeStyle = '#55FFFF';
+      c.beginPath(); c.arc(CX, CY + 6, 28, rad(0), rad(360 * p)); c.stroke();
+      text(c, '6 812', 100, 116, 15, '#FFFFFF');
+      text(c, 'steps', 100, 132, 10, '#AAFFFF', 500);
+      text(c, s.dayName + ' ' + s.dayNum, 6, 10, 13, '#AAFFFF', 600, 'left');
+      text(c, '11°', 194, 10, 13, '#AAFFFF', 600, 'right');
+      text(c, '72 ♥', 6, 218, 13, '#AAFFFF', 600, 'left');
+      text(c, '80%', 194, 218, 13, '#AAFFFF', 600, 'right');
+    },
+  },
+  {
+    name: 'Bands',
+    note: 'Poster-like: two solid coloured rings with ticks cut out of them. Heart rate in the middle.',
+    draw(c, s) {
+      c.fillStyle = '#000000'; c.fillRect(0, 0, W, H);
+      band(c, 98, 79, 0, 360, '#00AAAA');
+      minuteTicks(s, (k, d) => {
+        if (k === 0) line(c, d, 99, 78, 5, '#FFFFFF');
+        else if (k % 15 === 0) line(c, d, 99, 79, 3, '#000000');
+        else if (k % 5 === 0) line(c, d, 99, 84, 2, '#000000');
+        else line(c, d, 99, 92, 1, '#005555');
+      });
+      dayNightBand(c, s, 76, 58, { day: '#FFAA55', twilight: '#FF5555', night: '#555555' });
+      hourTicks(s, (k, d) => {
+        if (k === 0) line(c, d, 77, 57, 5, '#FFFFFF');
+        else line(c, d, 77, 70, 2, '#000000');
+      });
+      c.fillStyle = '#FFFFFF'; c.fillRect(83, 13, 34, 21 + 1); c.fillRect(83, 37, 34, 21);
+      text(c, pad(s.m), 100, 24.5, 19, '#000000', 800);
+      text(c, pad(s.hDisp), 100, 48, 19, '#000000', 800);
+      text(c, '♥', 100, 98, 16, '#FF5555', 700);
+      text(c, '72', 100, 120, 30, '#FFFFFF', 800);
+      text(c, s.dayName, 6, 10, 15, '#00AAAA', 800, 'left');
+      text(c, s.dayNum, 194, 10, 15, '#FFFFFF', 800, 'right');
+      text(c, '8 412', 6, 218, 14, '#AAAAAA', 700, 'left');
+      text(c, '11°', 194, 218, 14, '#AAAAAA', 700, 'right');
+    },
+  },
+  {
+    name: 'Brass',
+    note: 'Aviation instrument: brass tapered ticks on black, the readout is a framed counter window.',
+    draw(c, s) {
+      c.fillStyle = '#000000'; c.fillRect(0, 0, W, H);
+      c.strokeStyle = '#555555'; c.lineWidth = 1;
+      c.beginPath(); c.arc(CX, CY, 98, 0, 2 * Math.PI); c.stroke();
+      minuteTicks(s, (k, d) => {
+        if (k === 0) wedge(c, d, 96, 78, 3.5, '#FFFF55');
+        else if (k % 15 === 0) wedge(c, d, 96, 80, 2.4, '#AAAA55');
+        else if (k % 5 === 0) wedge(c, d, 96, 86, 1.6, '#AAAA55');
+        else line(c, d, 96, 92, 1, '#555555');
+      });
+      dayNightBand(c, s, 73, 70, { day: '#FFAA00', twilight: '#AA5500', night: '#555555' });
+      hourTicks(s, (k, d) => {
+        if (k === 0) wedge(c, d, 69, 56, 7, '#FFFF55');
+        else line(c, d, 69, 62, 2, k % (s.n / 4) === 0 ? '#AAAA55' : '#555555');
+      });
+      c.fillStyle = '#AAAA55'; rrect(c, 82, 10, 36, 58, 4); c.fill();
+      c.fillStyle = '#000000'; c.fillRect(85, 13, 30, 24); c.fillRect(85, 41, 30, 24);
+      text(c, pad(s.m), 100, 25.5, 19, '#FFFFFF', 600, 'center', 'ui-monospace, monospace');
+      text(c, pad(s.hDisp), 100, 53.5, 19, '#FFFFFF', 600, 'center', 'ui-monospace, monospace');
+      // Battery gauge in the middle
+      c.strokeStyle = '#AAAA55'; c.lineWidth = 1; c.strokeRect(84.5, 106.5, 28, 13);
+      c.fillStyle = '#AAAA55'; c.fillRect(113, 110, 3, 6);
+      c.fillStyle = '#FFAA00'; c.fillRect(87, 109, 23 * 0.8, 8);
+      text(c, s.dateShort, 100, 136, 12, '#AAAA55', 600, 'center', 'ui-monospace, monospace');
+      const mono = 'ui-monospace, monospace';
+      text(c, 'STP', 6, 8, 9, '#555555', 600, 'left', mono);
+      text(c, '8412', 6, 20, 13, '#AAAA55', 600, 'left', mono);
+      text(c, 'TMP', 194, 8, 9, '#555555', 600, 'right', mono);
+      text(c, '11°', 194, 20, 13, '#AAAA55', 600, 'right', mono);
+      text(c, 'HR', 6, 208, 9, '#555555', 600, 'left', mono);
+      text(c, '72', 6, 220, 13, '#AAAA55', 600, 'left', mono);
+      text(c, 'RISE', 194, 208, 9, '#555555', 600, 'right', mono);
+      text(c, '07:58', 194, 220, 13, '#AAAA55', 600, 'right', mono);
+    },
+  },
+];
+
+const grid = document.getElementById('grid');
+const canvases = DESIGNS.map(des => {
+  const fig = document.createElement('figure');
+  const cv = document.createElement('canvas');
+  const dpr = Math.max(2, window.devicePixelRatio || 1) * 2;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.getContext('2d').scale(dpr, dpr);
+  fig.append(cv);
+  fig.insertAdjacentHTML('beforeend', `<figcaption><b>${des.name}</b><span>${des.note}</span></figcaption>`);
+  grid.append(fig);
+  return cv;
+});
+
+const $ = id => document.getElementById(id);
+const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+function render() {
+  const now = +$('t').value;
+  const h = Math.floor(now / 60), m = now % 60;
+  const n = $('h24').checked ? 24 : 12;
+  const d = new Date();
+  const s = {
+    now, m, n,
+    hf: (h % n) + m / 60,          // fractional hour, so the hour ring creeps between hours
+    hDisp: n === 24 ? h : (h % 12 || 12),
+    dayName: DAYS[d.getDay()], dayNum: String(d.getDate()),
+    dateShort: DAYS[d.getDay()] + ' ' + d.getDate(),
+  };
+  $('tout').textContent = pad(h) + ':' + pad(m);
+  DESIGNS.forEach((des, i) => {
+    const c = canvases[i].getContext('2d');
+    c.save(); c.clearRect(0, 0, W, H); des.draw(c, s); c.restore();
+  });
+}
+
+function nowMinutes() { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); }
+$('t').value = nowMinutes();
+$('t').addEventListener('input', () => { $('live').checked = false; render(); });
+$('h24').addEventListener('change', render);
+setInterval(() => {
+  if ($('play').checked) { $('live').checked = false; $('t').value = (+$('t').value + 1) % 1440; render(); }
+  else if ($('live').checked && +$('t').value !== nowMinutes()) { $('t').value = nowMinutes(); render(); }
+}, 80);
+render();
+</script>
+</body>
+</html>
