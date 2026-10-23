@@ -6,7 +6,9 @@
     "pebble-app"
   ],
   "private": true,
-  "dependencies": {},
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
   "pebble": {
     "displayName": "Orbit",
     "uuid": "126629f0-928f-46f9-9f60-41bf98943b8d",
@@ -19,17 +21,117 @@
       "watchface": true
     },
     "resources": {
-      "media": []
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "WEATHER_SUN",
+          "file": "images/weather_timeline_sun.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_SUN_LARGE",
+          "file": "images/weather_timeline_sun_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_PARTLY_CLOUDY",
+          "file": "images/weather_partly_cloudy.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_PARTLY_CLOUDY_LARGE",
+          "file": "images/weather_partly_cloudy_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_CLOUDY",
+          "file": "images/weather_cloudy_day.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_CLOUDY_LARGE",
+          "file": "images/weather_cloudy_day_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_LIGHT_RAIN",
+          "file": "images/weather_light_rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_LIGHT_RAIN_LARGE",
+          "file": "images/weather_light_rain_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_HEAVY_RAIN",
+          "file": "images/weather_heavy_rain.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_HEAVY_RAIN_LARGE",
+          "file": "images/weather_heavy_rain_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_LIGHT_SNOW",
+          "file": "images/weather_light_snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_LIGHT_SNOW_LARGE",
+          "file": "images/weather_light_snow_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_HEAVY_SNOW",
+          "file": "images/weather_heavy_snow.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_HEAVY_SNOW_LARGE",
+          "file": "images/weather_heavy_snow_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_RAIN_SNOW",
+          "file": "images/weather_raining_and_snowing.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_RAIN_SNOW_LARGE",
+          "file": "images/weather_raining_and_snowing_large.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_GENERIC",
+          "file": "images/weather_timeline_weather.png"
+        },
+        {
+          "type": "bitmap",
+          "name": "WEATHER_GENERIC_LARGE",
+          "file": "images/weather_timeline_weather_large.png"
+        }
+      ]
     },
     "capabilities": [
       "location",
-      "health"
+      "health",
+      "configurable"
     ],
     "messageKeys": [
       "TEMPERATURE",
+      "WEATHER_CODE",
       "SUNRISE",
       "SUNSET",
-      "REQUEST_WEATHER"
+      "REQUEST_WEATHER",
+      "Ring12h",
+      "Digital12h",
+      "Center",
+      "CornerTL",
+      "CornerTR",
+      "CornerBL",
+      "CornerBR"
     ]
   },
   "license": "MIT"
