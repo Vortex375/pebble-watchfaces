@@ -19,10 +19,11 @@
 // Layout and palette
 // ---------------------------------------------------------------------------
 
-#define R_MIN      90   // minute dots
-#define R_HOUR_OUT 76   // hour band
-#define R_HOUR_IN  66
-#define R_HOUR     71   // hour dots, middle of the band
+#define R_TICK     98   // inner end of the static 5-minute tick marks
+#define R_MIN      91   // minute dots
+#define R_HOUR_OUT 78   // hour band
+#define R_HOUR_IN  62
+#define R_HOUR     70   // hour dots, middle of the band
 #define R_PROGRESS 29   // steps / battery progress ring in the centre
 #define STEP_GOAL  10000
 #define TWILIGHT   30   // minutes either side of sunrise / sunset
@@ -30,6 +31,7 @@
 #define C_BG       GColorOxfordBlue
 #define C_INFO     GColorCeleste
 #define C_ACCENT   GColorYellow
+#define C_TICK     GColorCobaltBlue
 #define C_DAY      GColorPastelYellow
 #define C_NIGHT    GColorLiberty
 #define C_DAWN     GColorBabyBlueEyes
@@ -112,10 +114,17 @@ static int32_t ring_angle(int minutes) {
   return (((minutes % span) + span) % span) * TRIG_MAX_ANGLE / span;
 }
 
+// v / TRIG_MAX_RATIO rounded to the nearest integer, also for negative v
+// (C division truncates towards zero)
+static int trig_round(int32_t v) {
+  return v >= 0 ? (v + TRIG_MAX_RATIO / 2) / TRIG_MAX_RATIO
+                : -((-v + TRIG_MAX_RATIO / 2) / TRIG_MAX_RATIO);
+}
+
 // Point at radius r around the centre, angle clockwise from 12 o'clock
 static GPoint polar(int32_t angle, int r) {
-  return GPoint(s_center.x + (r * sin_lookup(angle) + TRIG_MAX_RATIO / 2) / TRIG_MAX_RATIO,
-                s_center.y - (r * cos_lookup(angle) + TRIG_MAX_RATIO / 2) / TRIG_MAX_RATIO);
+  return GPoint(s_center.x + trig_round(r * sin_lookup(angle)),
+                s_center.y - trig_round(r * cos_lookup(angle)));
 }
 
 static void fill_circle(GContext *ctx, GPoint c, int r, GColor color) {
@@ -138,6 +147,35 @@ static void draw_text(GContext *ctx, const char *text, const char *font, GRect b
 // Rings
 // ---------------------------------------------------------------------------
 
+// Static tick marks every 5 minutes around the outside, cut off by the screen
+// edge at 3 and 9 o'clock. When the 0 or a 15-minute dot lines up with a tick
+// (on minutes divisible by 5), the tick takes on that dot's colour.
+//
+// Rounding both ends of such a short line separately would tilt it by up to
+// 4 degrees, so each tick runs from its rounded inner end along a whole-pixel
+// step (right, up) that points within 0.3 degrees of straight outwards. These
+// are the steps for 0, 30 and 60 degrees, about 8 px long; the other quadrants
+// are the same steps rotated.
+static const int8_t s_tick_step[3][2] = { { 0, 8 }, { 4, 7 }, { 7, 4 } };
+
+static void draw_ticks(GContext *ctx) {
+  int m = s_now % 60;
+  graphics_context_set_stroke_width(ctx, 3);
+  for (int i = 0; i < 12; i++) {
+    int p = i * 5;              // minute position, 0 at 12 o'clock
+    int k = (m - p + 60) % 60;  // minute dot at this position
+    graphics_context_set_stroke_color(ctx, k == 0 ? C_ACCENT : k % 15 == 0 ? GColorWhite : C_TICK);
+    int dx = s_tick_step[i % 3][0], dy = s_tick_step[i % 3][1];
+    for (int q = 0; q < i / 3; q++) {  // rotate a quarter turn clockwise
+      int t = dx;
+      dx = dy;
+      dy = -t;
+    }
+    GPoint in = polar(DEG_TO_TRIGANGLE(p * 6), R_TICK);
+    graphics_draw_line(ctx, in, GPoint(in.x + dx, in.y - dy));
+  }
+}
+
 static void draw_minute_ring(GContext *ctx) {
   int m = s_now % 60;
   for (int k = 0; k < 60; k++) {
@@ -146,12 +184,12 @@ static void draw_minute_ring(GContext *ctx) {
     GPoint p = polar(DEG_TO_TRIGANGLE(((m - k) * 6 + 360) % 360), R_MIN);
     if (k == 0) {
       graphics_context_set_stroke_color(ctx, C_ACCENT);
-      graphics_context_set_stroke_width(ctx, 2);
-      graphics_draw_circle(ctx, p, 4);
+      graphics_context_set_stroke_width(ctx, 3);
+      graphics_draw_circle(ctx, p, 5);
     } else if (k % 15 == 0) {
-      fill_circle(ctx, p, 3, GColorWhite);
+      fill_circle(ctx, p, 4, GColorWhite);
     } else if (k % 5 == 0) {
-      fill_circle(ctx, p, 2, C_INFO);
+      fill_circle(ctx, p, 3, GColorPictonBlue);
     } else {
       fill_circle(ctx, p, 1, GColorLiberty);
     }
@@ -193,18 +231,19 @@ static void draw_hour_ring(GContext *ctx) {
   for (int k = 0; k < hours; k++) {
     GPoint p = polar(ring_angle(s_now - k * 60), R_HOUR);
     if (k == 0) {
-      fill_circle(ctx, p, 6, C_BG);
-      fill_circle(ctx, p, 4, C_ACCENT);
+      fill_circle(ctx, p, 8, C_BG);
+      fill_circle(ctx, p, 6, C_ACCENT);
     } else {
-      fill_circle(ctx, p, 1, C_BG);
+      fill_circle(ctx, p, 2, C_BG);
     }
   }
 }
 
 // Pill across both rings at the top: minute above, hour below. GOTHIC 24
-// Bold digits are 14 px tall, starting 10 px below the text box top.
+// Bold digits are 14 px tall, starting 10 px below the text box top. The pill
+// reaches 7-8 px past the digits, beyond the inner edge of the hour band.
 static void draw_readout(GContext *ctx) {
-  GRect pill = GRect(s_center.x - 14, s_center.y - R_MIN - 12, 28, 44);
+  GRect pill = GRect(s_center.x - 14, s_center.y - R_MIN - 14, 28, 50);
   graphics_context_set_fill_color(ctx, C_BG);
   graphics_fill_rect(ctx, pill, 9, GCornersAll);
   graphics_context_set_stroke_color(ctx, C_INFO);
@@ -334,7 +373,7 @@ static void draw_progress(GContext *ctx, GPoint c, int value, int max, const cha
 
 // Centre metric, drawn around c (a little below the screen centre, which
 // balances the readout at the top). The space inside the hour ring is a
-// circle of radius 66 around the screen centre.
+// circle of radius 62 around the screen centre.
 static void draw_center(GContext *ctx) {
   GPoint c = GPoint(s_center.x, s_center.y + 6);
   switch (s_settings.center) {
@@ -373,6 +412,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, C_BG);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
   graphics_context_set_antialiased(ctx, true);
+  draw_ticks(ctx);
   draw_minute_ring(ctx);
   draw_hour_ring(ctx);
   draw_readout(ctx);
