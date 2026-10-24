@@ -272,8 +272,8 @@ static void draw_hour_ring(GContext *ctx) {
   for (int k = 0; k < hours; k++) {
     GPoint p = polar(ring_angle(s_now - k * 60), R_HOUR);
     if (k == 0) {
-      fill_circle(ctx, p, 8, C_BG);
-      fill_circle(ctx, p, 6, C_ACCENT);
+      fill_circle(ctx, p, 6, C_BG);
+      fill_circle(ctx, p, 5, C_ACCENT);
     } else {
       fill_circle(ctx, p, 2, C_BG);
     }
