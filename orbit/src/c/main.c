@@ -6,7 +6,7 @@
  * whole day, or of the next 12 hours in 12-hour mode). Both turn clockwise: the dot
  * at the top is the current minute / hour, and the yellow 0-minute / 0-hour
  * marks can be read like clock hands. The hour ring is coloured like the sky:
- * cream by day, slate by night, periwinkle at dawn and apricot at dusk
+ * cream by day, blue by night, purple at dawn and apricot at dusk
  * (sunrise and sunset from Open-Meteo via PebbleKit JS).
  *
  * The four corners and the centre each show a configurable metric: weather,
@@ -37,8 +37,8 @@
 #define C_ACCENT   GColorYellow
 #define C_TICK     GColorCobaltBlue
 #define C_DAY      GColorPastelYellow
-#define C_NIGHT    GColorLiberty
-#define C_DAWN     GColorBabyBlueEyes
+#define C_NIGHT    GColorBlueMoon
+#define C_DAWN     GColorLavenderIndigo
 #define C_DUSK     GColorRajah
 
 // ---------------------------------------------------------------------------
