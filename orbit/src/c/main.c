@@ -196,16 +196,16 @@ static void draw_ticks(GContext *ctx) {
 }
 
 // Static tick marks inside the hour ring, one per hour position (24 or 12).
-// Each is a thin annular sector about 2 px wide, so its edges run exactly
+// Each is a thin annular sector 3 degrees wide, so its edges run exactly
 // towards the centre without any rounding tilt. The quarter positions (12, 3,
-// 6 and 9 o'clock) are longer, about 4 px wide and white like the 15-minute
+// 6 and 9 o'clock) are longer, 4 degrees wide and white like the 15-minute
 // dots.
 static void draw_hour_ticks(GContext *ctx) {
   int hours = ring_span() / 60;
   for (int i = 0; i < hours; i++) {
     int32_t a = TRIG_MAX_ANGLE * i / hours;
     bool quarter = i % (hours / 4) == 0;
-    int32_t half = quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(1);
+    int32_t half = quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(3) / 2;
     graphics_context_set_fill_color(ctx, quarter ? GColorWhite : C_TICK);
     fill_sector(ctx, R_HTICK, quarter ? HTICK_LEN_QUARTER : HTICK_LEN, a - half, a + half);
   }
