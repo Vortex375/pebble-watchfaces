@@ -3,7 +3,7 @@
  *
  * Two-ring watch face for Pebble Time 2 (emery, 200x228). The outer ring
  * carries a dot for every minute, the inner ring a dot for every hour (of the
- * whole day, or of now ±6 hours in 12-hour mode). Both turn clockwise: the dot
+ * whole day, or of the next 12 hours in 12-hour mode). Both turn clockwise: the dot
  * at the top is the current minute / hour, and the yellow 0-minute / 0-hour
  * marks can be read like clock hands. The hour ring is coloured like the sky:
  * cream by day, slate by night, periwinkle at dawn and apricot at dusk
@@ -27,6 +27,7 @@
 #define R_HTICK    59   // outer end of the static hour tick marks
 #define HTICK_LEN  4
 #define HTICK_LEN_QUARTER 7
+#define HTICK_GROW 4    // extra length when the hour hand is right over a tick
 #define R_PROGRESS 29   // steps / battery progress ring in the centre
 #define STEP_GOAL  10000
 #define TWILIGHT   30   // minutes either side of sunrise / sunset
@@ -200,14 +201,24 @@ static void draw_ticks(GContext *ctx) {
 // towards the centre without any rounding tilt. The quarter positions (12, 3,
 // 6 and 9 o'clock) are longer, 4 degrees wide and white like the 15-minute
 // dots.
+//
+// The tick nearest the hour hand (the yellow 0-hour dot) reacts to it: within
+// 30 minutes it grows longer and wider, up to HTICK_GROW px and 2 degrees
+// more when the hand is right over it, and within 15 minutes it turns yellow.
+// That also keeps the hand visible at 12 o'clock, where the readout hides it.
 static void draw_hour_ticks(GContext *ctx) {
-  int hours = ring_span() / 60;
+  int span = ring_span(), hours = span / 60, hand = s_now % span;
   for (int i = 0; i < hours; i++) {
     int32_t a = TRIG_MAX_ANGLE * i / hours;
     bool quarter = i % (hours / 4) == 0;
-    int32_t half = quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(3) / 2;
-    graphics_context_set_fill_color(ctx, quarter ? GColorWhite : C_TICK);
-    fill_sector(ctx, R_HTICK, quarter ? HTICK_LEN_QUARTER : HTICK_LEN, a - half, a + half);
+    int d = ((hand - i * 60) % span + span + span / 2) % span - span / 2;
+    if (d < 0) d = -d;              // minutes between the hand and this tick
+    int near = d < 30 ? 30 - d : 0;  // 0 (30 min or more away) .. 30 (on it)
+    int len = (quarter ? HTICK_LEN_QUARTER : HTICK_LEN) + HTICK_GROW * near / 30;
+    int32_t half = (quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(3) / 2) +
+                   DEG_TO_TRIGANGLE(1) * near / 30;
+    graphics_context_set_fill_color(ctx, d <= 15 ? C_ACCENT : quarter ? GColorWhite : C_TICK);
+    fill_sector(ctx, R_HTICK, len, a - half, a + half);
   }
 }
 
@@ -231,17 +242,19 @@ static void draw_minute_ring(GContext *ctx) {
   }
 }
 
-// Fill the hour band from time of day t0 to t1 (minutes, t0 < t1). Time t
-// sits (now - t) / span of a turn clockwise from the top: the past to the
-// right, the future to the left. Only now ± half a turn is shown, which
-// matters for the 12-hour ring.
+// Fill the hour band from time of day t0 to t1 (minutes, t0 < t1). The ring
+// shows the next turn's worth of time: time t sits (t - now) / span of a turn
+// counter-clockwise from the top, so every hour position is coloured for the
+// next time that hour comes round. For the 12-hour ring that is the next 12
+// hours, with the join at the top under the readout; the 24-hour ring shows
+// the whole day either way.
 static void hour_arc(GContext *ctx, int t0, int t1, GColor color) {
-  int span = ring_span(), half = span / 2;
+  int span = ring_span();
   graphics_context_set_fill_color(ctx, color);
   for (int shift = -24 * 60; shift <= 24 * 60; shift += 24 * 60) {
     int a = t0 + shift - s_now, b = t1 + shift - s_now;  // relative to now
-    if (a < -half) a = -half;
-    if (b > half) b = half;
+    if (a < 0) a = 0;
+    if (b > span) b = span;
     if (a >= b) continue;
     fill_sector(ctx, R_HOUR_OUT, R_HOUR_OUT - R_HOUR_IN, -b * TRIG_MAX_ANGLE / span,
                 -a * TRIG_MAX_ANGLE / span);

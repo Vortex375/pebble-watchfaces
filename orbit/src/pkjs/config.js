@@ -23,7 +23,7 @@ module.exports = [
     items: [
       { type: 'heading', defaultValue: 'Time' },
       { type: 'toggle', messageKey: 'Ring12h', label: '12-hour hour ring', defaultValue: false,
-        description: 'Off: the ring shows the whole day. On: it shows 6 hours either side of now.' },
+        description: 'Off: the ring shows the whole day. On: it shows the next 12 hours.' },
       { type: 'toggle', messageKey: 'Digital12h', label: '12-hour digital time', defaultValue: false }
     ]
   },
