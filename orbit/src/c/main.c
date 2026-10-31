@@ -173,10 +173,10 @@ static void draw_text(GContext *ctx, const char *text, const char *font, GRect b
 //
 // Rounding both ends of such a short line separately would tilt it by up to
 // 4 degrees, so each tick runs from its rounded inner end along a whole-pixel
-// step (right, up) that points within 0.3 degrees of straight outwards. These
-// are the steps for 0, 30 and 60 degrees, about 8 px long; the other quadrants
+// step (right, up) that points within 1 degree of straight outwards. These
+// are the steps for 0, 30 and 60 degrees, about 6 px long; the other quadrants
 // are the same steps rotated.
-static const int8_t s_tick_step[3][2] = { { 0, 8 }, { 4, 7 }, { 7, 4 } };
+static const int8_t s_tick_step[3][2] = { { 0, 6 }, { 3, 5 }, { 5, 3 } };
 
 static void draw_ticks(GContext *ctx) {
   int m = s_now % 60;
