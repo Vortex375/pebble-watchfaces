@@ -1,0 +1,13 @@
+Tellura shows the time on two turning rings: minutes on the outer ring, hours on the inner one. Both turn clockwise. Read the current minute and hour at the top, or read the yellow markers like the hands of a classic clock.
+
+The hour ring is coloured like the sky: cream by day, blue by night, purple at dawn and apricot at dusk, using the sunrise and sunset times for your location. Look counter-clockwise from the top to see what is ahead, like how long until sunset or when the sun comes up.
+
+Features:
+- 24-hour ring showing the whole day, or a 12-hour ring showing the next 12 hours
+- Digital time on the rings, or in the centre as hours above minutes or as HH:MM
+- 12- or 24-hour digital time
+- Configurable centre and corners: weather, date, steps, heart rate or battery
+- Tick marks that light up as the rings turn, and an hour tick that grows as the hour hand approaches (both can be switched off)
+- Weather, sunrise and sunset from Open-Meteo, no account or API key needed
+
+Made for the Pebble Time 2.
