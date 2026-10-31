@@ -1,5 +1,5 @@
-// Clay settings page. Select values are sent as strings ("0".."5").
-var metric = function (key, label, def) {
+// Clay settings page. Select values are sent as strings ("0".."7").
+var metric = function (key, label, def, extra) {
   return {
     type: 'select',
     messageKey: key,
@@ -12,9 +12,15 @@ var metric = function (key, label, def) {
       { label: 'Steps', value: '3' },
       { label: 'Heart rate', value: '4' },
       { label: 'Battery', value: '5' }
-    ]
+    ].concat(extra || [])
   };
 };
+
+// The time can move from the top of the rings to the centre
+var centreTime = [
+  { label: 'Time (hours above minutes)', value: '6' },
+  { label: 'Time (HH:MM)', value: '7' }
+];
 
 module.exports = [
   { type: 'heading', defaultValue: 'Tellura' },
@@ -40,8 +46,8 @@ module.exports = [
   {
     type: 'section',
     items: [
-      { type: 'heading', defaultValue: 'Metrics' },
-      metric('Center', 'Centre', '3'),
+      { type: 'heading', defaultValue: 'Display' },
+      metric('Center', 'Centre', '3', centreTime),
       metric('CornerTL', 'Top left', '2'),
       metric('CornerTR', 'Top right', '1'),
       metric('CornerBL', 'Bottom left', '4'),

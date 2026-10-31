@@ -10,6 +10,8 @@ weather, steps, heart rate or battery.
 | ![Default settings](screenshots/2x/emery_default.png) | ![Weather in the centre with the 12-hour ring](screenshots/2x/emery_weather_12h.png) |
 | **Date in the centre** | **Battery in the centre** |
 | ![Date in the centre](screenshots/2x/emery_date.png) | ![Battery in the centre](screenshots/2x/emery_battery.png) |
+| **Time in the centre, hours above minutes** | **Time in the centre, HH:MM** |
+| ![Time in the centre, hours above minutes](screenshots/2x/emery_time_vertical.png) | ![Time in the centre as HH:MM](screenshots/2x/emery_time_horizontal.png) |
 
 ## How to read it
 
@@ -35,8 +37,10 @@ Open the watch face's settings in the Pebble app to change:
 - **12-hour hour ring**: off by default (the ring shows the whole day)
 - **12-hour digital time**: off by default (24-hour)
 - **Tick marks**: minute and hour tick marks, each on by default
-- **Metrics**: weather, date, steps, heart rate, battery or nothing, for the
-  centre and each corner
+- **Display**: weather, date, steps, heart rate, battery or nothing, for the
+  centre and each corner. The centre can also show the time, as hours above
+  minutes or as HH:MM; the digits then move off the rings and two small
+  triangles mark the reading position at the top
 
 ## Build and install
 

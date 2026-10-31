@@ -47,7 +47,9 @@
 
 #define SETTINGS_KEY 10
 
-enum { ITEM_NONE, ITEM_WEATHER, ITEM_DATE, ITEM_STEPS, ITEM_HEART, ITEM_BATTERY, ITEM_COUNT };
+enum { ITEM_NONE, ITEM_WEATHER, ITEM_DATE, ITEM_STEPS, ITEM_HEART, ITEM_BATTERY,
+       ITEM_TIME_VERTICAL, ITEM_TIME_HORIZONTAL,  // centre only
+       ITEM_COUNT };
 enum { CORNER_TL, CORNER_TR, CORNER_BL, CORNER_BR };
 
 typedef struct {
@@ -140,6 +142,15 @@ static void fill_circle(GContext *ctx, GPoint c, int r, GColor color) {
   graphics_fill_circle(ctx, c, r);
 }
 
+static void fill_triangle(GContext *ctx, GPoint a, GPoint b, GPoint c, GColor color) {
+  GPoint pts[3] = { a, b, c };
+  GPathInfo info = { .num_points = 3, .points = pts };
+  GPath *p = gpath_create(&info);
+  graphics_context_set_fill_color(ctx, color);
+  gpath_draw_filled(ctx, p);
+  gpath_destroy(p);
+}
+
 static GRect square_around(GPoint c, int r) {
   return GRect(c.x - r, c.y - r, 2 * r + 1, 2 * r + 1);
 }
@@ -178,13 +189,22 @@ static void draw_text(GContext *ctx, const char *text, const char *font, GRect b
 // are the same steps rotated.
 static const int8_t s_tick_step[3][2] = { { 0, 6 }, { 3, 5 }, { 5, 3 } };
 
+static bool time_in_center(void) {
+  return s_settings.center == ITEM_TIME_VERTICAL || s_settings.center == ITEM_TIME_HORIZONTAL;
+}
+
+// Colour of the static minute tick at minute position p (0 at 12 o'clock)
+static GColor minute_tick_color(int p) {
+  int k = (s_now % 60 - p + 60) % 60;  // minute dot at this position
+  return k == 0 ? C_ACCENT : k % 15 == 0 ? GColorWhite : C_TICK;
+}
+
 static void draw_ticks(GContext *ctx) {
-  int m = s_now % 60;
   graphics_context_set_stroke_width(ctx, 3);
   for (int i = 0; i < 12; i++) {
-    int p = i * 5;              // minute position, 0 at 12 o'clock
-    int k = (m - p + 60) % 60;  // minute dot at this position
-    graphics_context_set_stroke_color(ctx, k == 0 ? C_ACCENT : k % 15 == 0 ? GColorWhite : C_TICK);
+    if (i == 0 && time_in_center()) continue;  // drawn as a pointer instead
+    int p = i * 5;  // minute position, 0 at 12 o'clock
+    graphics_context_set_stroke_color(ctx, minute_tick_color(p));
     int dx = s_tick_step[i % 3][0], dy = s_tick_step[i % 3][1];
     for (int q = 0; q < i / 3; q++) {  // rotate a quarter turn clockwise
       int t = dx;
@@ -206,13 +226,20 @@ static void draw_ticks(GContext *ctx) {
 // 30 minutes it grows longer and wider, up to HTICK_GROW px and 2 degrees
 // more when the hand is right over it, and within 15 minutes it turns yellow.
 // That also keeps the hand visible at 12 o'clock, where the readout hides it.
+// Minutes between the hour hand and the static hour tick i
+static int hand_distance(int i) {
+  int span = ring_span();
+  int d = ((s_now % span - i * 60) % span + span + span / 2) % span - span / 2;
+  return d < 0 ? -d : d;
+}
+
 static void draw_hour_ticks(GContext *ctx) {
-  int span = ring_span(), hours = span / 60, hand = s_now % span;
+  int hours = ring_span() / 60;
   for (int i = 0; i < hours; i++) {
+    if (i == 0 && time_in_center()) continue;  // drawn as a pointer instead
     int32_t a = TRIG_MAX_ANGLE * i / hours;
     bool quarter = i % (hours / 4) == 0;
-    int d = ((hand - i * 60) % span + span + span / 2) % span - span / 2;
-    if (d < 0) d = -d;              // minutes between the hand and this tick
+    int d = hand_distance(i);
     int near = d < 30 ? 30 - d : 0;  // 0 (30 min or more away) .. 30 (on it)
     int len = (quarter ? HTICK_LEN_QUARTER : HTICK_LEN) + HTICK_GROW * near / 30;
     int32_t half = (quarter ? DEG_TO_TRIGANGLE(2) : DEG_TO_TRIGANGLE(3) / 2) +
@@ -246,15 +273,18 @@ static void draw_minute_ring(GContext *ctx) {
 // shows the next turn's worth of time: time t sits (t - now) / span of a turn
 // counter-clockwise from the top, so every hour position is coloured for the
 // next time that hour comes round. For the 12-hour ring that is the next 12
-// hours, with the join at the top under the readout; the 24-hour ring shows
-// the whole day either way.
+// hours; the 24-hour ring shows the whole day either way. Where now meets a
+// turn ahead, at the top, the ring is cut by a small gap (HOUR_GAP_DEG on
+// each side) so the join reads as intentional rather than as a seam.
+#define HOUR_GAP_DEG 2
+
 static void hour_arc(GContext *ctx, int t0, int t1, GColor color) {
-  int span = ring_span();
+  int span = ring_span(), gap = span * HOUR_GAP_DEG / 360;
   graphics_context_set_fill_color(ctx, color);
   for (int shift = -24 * 60; shift <= 24 * 60; shift += 24 * 60) {
     int a = t0 + shift - s_now, b = t1 + shift - s_now;  // relative to now
-    if (a < 0) a = 0;
-    if (b > span) b = span;
+    if (a < gap) a = gap;
+    if (b > span - gap) b = span - gap;
     if (a >= b) continue;
     fill_sector(ctx, R_HOUR_OUT, R_HOUR_OUT - R_HOUR_IN, -b * TRIG_MAX_ANGLE / span,
                 -a * TRIG_MAX_ANGLE / span);
@@ -262,9 +292,7 @@ static void hour_arc(GContext *ctx, int t0, int t1, GColor color) {
 }
 
 static void draw_hour_ring(GContext *ctx) {
-  graphics_context_set_fill_color(ctx, C_NIGHT);
-  graphics_fill_radial(ctx, square_around(s_center, R_HOUR_OUT), GOvalScaleModeFitCircle,
-                       R_HOUR_OUT - R_HOUR_IN, 0, TRIG_MAX_ANGLE);
+  hour_arc(ctx, s_now, s_now + ring_span(), C_NIGHT);  // whole ring except the gap
   hour_arc(ctx, s_sunrise + TWILIGHT, s_sunset - TWILIGHT, C_DAY);
   hour_arc(ctx, s_sunrise - TWILIGHT, s_sunrise + TWILIGHT, C_DAWN);
   hour_arc(ctx, s_sunset - TWILIGHT, s_sunset + TWILIGHT, C_DUSK);
@@ -314,11 +342,8 @@ static void draw_heart(GContext *ctx, GPoint c, int s, GColor color) {
   graphics_context_set_fill_color(ctx, color);
   graphics_fill_circle(ctx, GPoint(c.x - 3 * s, c.y - 2 * s), 3 * s);
   graphics_fill_circle(ctx, GPoint(c.x + 3 * s, c.y - 2 * s), 3 * s);
-  GPoint tri[3] = { { c.x - 6 * s, c.y - s }, { c.x + 6 * s, c.y - s }, { c.x, c.y + 6 * s } };
-  GPathInfo info = { .num_points = 3, .points = tri };
-  GPath *p = gpath_create(&info);
-  gpath_draw_filled(ctx, p);
-  gpath_destroy(p);
+  fill_triangle(ctx, GPoint(c.x - 6 * s, c.y - s), GPoint(c.x + 6 * s, c.y - s),
+                GPoint(c.x, c.y + 6 * s), color);
 }
 
 static void draw_shoe(GContext *ctx, GPoint c) {
@@ -415,9 +440,56 @@ static void draw_progress(GContext *ctx, GPoint c, int value, int max, const cha
 // Centre metric, drawn around c (a little below the screen centre, which
 // balances the readout at the top). The space inside the hour ring is a
 // circle of radius 62 around the screen centre.
+// With the time in the centre there is no readout; instead the top minute
+// and hour ticks become triangles pointing at each other across the rings,
+// marking the reading position. They keep the ticks' colours.
+static void draw_pointers(GContext *ctx) {
+  int x = s_center.x, top = s_center.y - R_TICK, bottom = s_center.y - R_HTICK;
+  fill_triangle(ctx, GPoint(x - 5, top - 8), GPoint(x + 5, top - 8), GPoint(x, top),
+                minute_tick_color(0));
+  fill_triangle(ctx, GPoint(x - 5, bottom + 8), GPoint(x + 5, bottom + 8), GPoint(x, bottom),
+                hand_distance(0) <= 15 ? C_ACCENT : GColorWhite);
+}
+
+// Time in the centre: hours in yellow and minutes in white, like the readout
+static void draw_center_time(GContext *ctx, bool vertical) {
+  GPoint c = s_center;
+  if (vertical) {
+    GFont font = fonts_get_system_font(FONT_KEY_LECO_42_NUMBERS);
+    graphics_context_set_text_color(ctx, C_ACCENT);
+    graphics_draw_text(ctx, s_hour_txt, font, GRect(c.x - 40, c.y - 50, 80, 50),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    graphics_context_set_text_color(ctx, GColorWhite);
+    graphics_draw_text(ctx, s_min_txt, font, GRect(c.x - 40, c.y - 6, 80, 50),
+                       GTextOverflowModeFill, GTextAlignmentCenter, NULL);
+    return;
+  }
+  // HH:MM in three pieces, measured so the whole is centred
+  GFont font = fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS);
+  const char *parts[3] = { s_hour_txt, ":", s_min_txt };
+  GColor colors[3] = { C_ACCENT, GColorWhite, GColorWhite };
+  int w[3], total = 0;
+  for (int i = 0; i < 3; i++) {
+    w[i] = graphics_text_layout_get_content_size(parts[i], font, GRect(0, 0, 100, 40),
+                                                 GTextOverflowModeFill, GTextAlignmentLeft).w;
+    total += w[i];
+  }
+  int x = c.x - total / 2;
+  for (int i = 0; i < 3; i++) {
+    graphics_context_set_text_color(ctx, colors[i]);
+    graphics_draw_text(ctx, parts[i], font, GRect(x, c.y - 21, w[i] + 2, 40),
+                       GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+    x += w[i];
+  }
+}
+
 static void draw_center(GContext *ctx) {
   GPoint c = GPoint(s_center.x, s_center.y + 6);
   switch (s_settings.center) {
+    case ITEM_TIME_VERTICAL:
+    case ITEM_TIME_HORIZONTAL:
+      draw_center_time(ctx, s_settings.center == ITEM_TIME_VERTICAL);
+      break;
     case ITEM_STEPS:
       draw_progress(ctx, c, s_steps, STEP_GOAL, s_steps_txt, "steps");
       break;
@@ -457,7 +529,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_minute_ring(ctx);
   draw_hour_ring(ctx);
   if (s_settings.hour_ticks) draw_hour_ticks(ctx);
-  draw_readout(ctx);
+  if (time_in_center()) draw_pointers(ctx); else draw_readout(ctx);
   draw_center(ctx);
   draw_corner(ctx, s_settings.corner[CORNER_TL], bounds, false, false);
   draw_corner(ctx, s_settings.corner[CORNER_TR], bounds, true, false);
@@ -622,7 +694,7 @@ static bool read_settings(DictionaryIterator *iter) {
   for (int i = 0; i < 4; i++) {
     if ((t = dict_find(iter, *corner_keys[i]))) {
       int v = tuple_int(t);
-      if (v >= ITEM_NONE && v < ITEM_COUNT) s_settings.corner[i] = v;
+      if (v >= ITEM_NONE && v <= ITEM_BATTERY) s_settings.corner[i] = v;  // no time
       changed = true;
     }
   }
