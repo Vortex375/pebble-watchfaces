@@ -5,7 +5,7 @@ project in its own folder.
 
 | [Clock Town Clock](clocktown-clock/) | [Tellura](tellura/) |
 | :---: | :---: |
-| ![Clock Town Clock](clocktown-clock/screenshots/2x/emery_default.png) | ![Tellura](tellura/screenshots/emery_default.png) |
+| ![Clock Town Clock](clocktown-clock/screenshots/2x/emery_default.png) | ![Tellura](tellura/screenshots/2x/emery_default.png) |
 | Inspired by the Clock Tower clock from The Legend of Zelda: Majora's Mask | Two turning rings for minutes and hours, the hour ring coloured by day, night, dawn and dusk |
 
 ## Build and install
