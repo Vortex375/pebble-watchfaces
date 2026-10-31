@@ -1,5 +1,5 @@
 /**
- * Orbit
+ * Tellura
  *
  * Two-ring watch face for Pebble Time 2 (emery, 200x228). The outer ring
  * carries a dot for every minute, the inner ring a dot for every hour (of the

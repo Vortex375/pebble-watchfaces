@@ -17,7 +17,7 @@ var metric = function (key, label, def) {
 };
 
 module.exports = [
-  { type: 'heading', defaultValue: 'Orbit' },
+  { type: 'heading', defaultValue: 'Tellura' },
   {
     type: 'section',
     items: [
